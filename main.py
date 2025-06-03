@@ -1,159 +1,203 @@
 import pygame
 import time
 import random
+from achievements import AchievementManager, Achievement
 
 pygame.init()
 
-def init_game():
-    # Window size
-    window_x = 600
-    window_y = 400
-
-    # Initialize window
-    pygame.display.set_caption('Snake Game')
-    game_window = pygame.display.set_mode((window_x, window_y))
-
-    # Snake default position and body
-    snake_pos = [100, 50]
-    snake_body = [[100, 50], [90, 50], [80, 50]]
-
-    # Food position
-    food_pos = [random.randrange(1, (window_x//10)) * 10,
-                random.randrange(1, (window_y//10)) * 10]
-    food_spawn = True
-
-    # Direction
-    direction = 'RIGHT'
-    change_to = direction
-
-    # Score
-    score = 0
-
-    return window_x, window_y, game_window, snake_pos, snake_body, food_pos, food_spawn, direction, change_to, score
-
-# Colors
+# Define colors
 black = pygame.Color(0, 0, 0)
 white = pygame.Color(255, 255, 255)
 red = pygame.Color(255, 0, 0)
 green = pygame.Color(0, 255, 0)
+blue = pygame.Color(0, 0, 255)
 
-# FPS controller
+# Window size
+window_x = 720
+window_y = 480
+
+# Initialize game window
+game_window = pygame.display.set_mode((window_x, window_y))
+pygame.display.set_caption('Snake Game with Achievements')
 fps = pygame.time.Clock()
 
-def show_score(game_window, score):
-    font = pygame.font.SysFont('arial', 24)
-    score_surface = font.render('Score : ' + str(score), True, white)
-    game_window.blit(score_surface, (10, 10))
-
-def game_over(window_x, window_y, game_window, score):
+def init_game():
+    # Starting position of snake
+    snake_pos = [100, 50]
+    
+    # First 4 blocks of snake body
+    snake_body = [[100, 50], [90, 50], [80, 50], [70, 50]]
+    
+    # First food position
+    food_pos = [random.randrange(1, (window_x//10)) * 10,
+                random.randrange(1, (window_y//10)) * 10]
+    food_spawn = True
+    
+    # Starting direction
+    direction = 'RIGHT'
+    change_to = direction
+    
+    # Initial score
+    score = 0
+    
+    # Initialize achievement system
+    achievement_manager = AchievementManager()
     start_time = time.time()
-    font = pygame.font.SysFont('arial', 48)
-    restart_font = pygame.font.SysFont('arial', 24)
-    countdown_font = pygame.font.SysFont('arial', 20)
+    total_food_eaten = 0
+    near_wall_time = 0
     
-    go_surface = font.render('Game Over', True, red)
-    restart_surface = restart_font.render('Press R to Restart', True, white)
+    return (window_x, window_y, game_window, snake_pos, snake_body, food_pos, 
+            food_spawn, direction, change_to, score, achievement_manager, 
+            start_time, total_food_eaten, near_wall_time)
+
+def check_achievements(game_state):
+    window_x, window_y, game_window, snake_pos, snake_body, _, _, _, _, score, \
+    achievement_manager, start_time, total_food_eaten, near_wall_time = game_state
     
-    go_rect = go_surface.get_rect()
-    restart_rect = restart_surface.get_rect()
+    # Speed Demon
+    if len(snake_body) >= 20:
+        if time.time() - start_time <= 60:
+            achievement_manager.update_progress(Achievement.SPEED_DEMON, 20, game_window)
     
-    go_rect.midtop = (window_x // 2, window_y // 4)
-    restart_rect.midtop = (window_x // 2, window_y // 2)
+    # Snake Master
+    achievement_manager.update_progress(Achievement.SNAKE_MASTER, score, game_window)
     
-    while True:
-        remaining_time = 5 - int(time.time() - start_time)
-        game_window.fill(black)
-        game_window.blit(go_surface, go_rect)
-        game_window.blit(restart_surface, restart_rect)
-        
-        countdown_surface = countdown_font.render(f'Auto-restart in {remaining_time}s', True, white)
-        countdown_rect = countdown_surface.get_rect()
-        countdown_rect.midtop = (window_x // 2, window_y // 2 + 40)
-        game_window.blit(countdown_surface, countdown_rect)
-        
-        show_score(game_window, score)
-        pygame.display.flip()
-        
-        for event in pygame.event.get():
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_r:
-                    return True
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                return False
-        
-        if time.time() - start_time >= 5:
-            return True
-        
-        pygame.time.wait(10)
+    # Food Lover
+    achievement_manager.update_progress(Achievement.FOOD_LOVER, total_food_eaten, game_window)
+    
+    # Survivor
+    elapsed_time = time.time() - start_time
+    achievement_manager.update_progress(Achievement.SURVIVOR, elapsed_time, game_window)
+    
+    # Wall Hugger
+    if (snake_pos[0] < 20 or snake_pos[0] > window_x - 20 or 
+        snake_pos[1] < 20 or snake_pos[1] > window_y - 20):
+        near_wall_time += 1/15  # Assuming 15 FPS
+        achievement_manager.update_progress(Achievement.WALL_HUGGER, near_wall_time, game_window)
+    
+    # Update achievement popup
+    achievement_manager.popup.update(game_window)
+    
+    return near_wall_time
+
+def show_score(game_window, score):
+    # Create font object
+    score_font = pygame.font.SysFont('arial', 20)
+    
+    # Create the display surface object
+    score_surface = score_font.render(f'Score: {score}', True, white)
+    score_rect = score_surface.get_rect()
+    
+    # Display the score
+    game_window.blit(score_surface, score_rect)
+
+def game_over(game_window, score):
+    # Game over font
+    font = pygame.font.SysFont('arial', 50)
+    
+    # Game over surface
+    game_over_surface = font.render('Game Over!', True, red)
+    game_over_rect = game_over_surface.get_rect()
+    game_over_rect.midtop = (window_x/2, window_y/4)
+    
+    # Score surface
+    score_surface = font.render(f'Score: {score}', True, white)
+    score_rect = score_surface.get_rect()
+    score_rect.midtop = (window_x/2, window_y/2)
+    
+    # Draw surfaces
+    game_window.fill(black)
+    game_window.blit(game_over_surface, game_over_rect)
+    game_window.blit(score_surface, score_rect)
+    pygame.display.flip()
+    
+    # Wait 2 seconds before quitting
+    time.sleep(2)
+    pygame.quit()
+    quit()
 
 def game_loop():
-    window_x, window_y, game_window, snake_pos, snake_body, food_pos, food_spawn, direction, change_to, score = init_game()
-    
+    game_state = list(init_game())
     running = True
+
     while running:
         for event in pygame.event.get():
             if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_UP and direction != 'DOWN':
-                    change_to = 'UP'
-                elif event.key == pygame.K_DOWN and direction != 'UP':
-                    change_to = 'DOWN'
-                elif event.key == pygame.K_LEFT and direction != 'RIGHT':
-                    change_to = 'LEFT'
-                elif event.key == pygame.K_RIGHT and direction != 'LEFT':
-                    change_to = 'RIGHT'
+                if event.key == pygame.K_UP and game_state[7] != 'DOWN':
+                    game_state[8] = 'UP'
+                elif event.key == pygame.K_DOWN and game_state[7] != 'UP':
+                    game_state[8] = 'DOWN'
+                elif event.key == pygame.K_LEFT and game_state[7] != 'RIGHT':
+                    game_state[8] = 'LEFT'
+                elif event.key == pygame.K_RIGHT and game_state[7] != 'LEFT':
+                    game_state[8] = 'RIGHT'
+                elif event.key == pygame.K_TAB:
+                    game_state[10].draw_achievements_screen(game_state[2])
+                    pygame.display.update()
+                    pygame.time.wait(2000)
             elif event.type == pygame.QUIT:
                 pygame.quit()
                 return False
 
-        direction = change_to
+        # Direction validation
+        if game_state[8] == 'UP' and game_state[7] != 'DOWN':
+            game_state[7] = 'UP'
+        if game_state[8] == 'DOWN' and game_state[7] != 'UP':
+            game_state[7] = 'DOWN'
+        if game_state[8] == 'LEFT' and game_state[7] != 'RIGHT':
+            game_state[7] = 'LEFT'
+        if game_state[8] == 'RIGHT' and game_state[7] != 'LEFT':
+            game_state[7] = 'RIGHT'
 
-        if direction == 'UP':
-            snake_pos[1] -= 10
-        elif direction == 'DOWN':
-            snake_pos[1] += 10
-        elif direction == 'LEFT':
-            snake_pos[0] -= 10
-        elif direction == 'RIGHT':
-            snake_pos[0] += 10
+        # Moving the snake
+        if game_state[7] == 'UP':
+            game_state[3][1] -= 10
+        if game_state[7] == 'DOWN':
+            game_state[3][1] += 10
+        if game_state[7] == 'LEFT':
+            game_state[3][0] -= 10
+        if game_state[7] == 'RIGHT':
+            game_state[3][0] += 10
 
-        snake_body.insert(0, list(snake_pos))
-        if snake_pos == food_pos:
-            score += 1
-            food_spawn = False
+        # Snake body growing mechanism
+        game_state[4].insert(0, list(game_state[3]))
+        
+        if game_state[3] == game_state[5]:  # snake_pos == food_pos
+            game_state[9] += 1  # score
+            game_state[12] += 1  # total_food_eaten
+            game_state[6] = False  # food_spawn
         else:
-            snake_body.pop()
+            game_state[4].pop()
 
-        if not food_spawn:
-            food_pos = [random.randrange(1, (window_x//10)) * 10,
-                       random.randrange(1, (window_y//10)) * 10]
-        food_spawn = True
+        # Spawning food
+        if not game_state[6]:
+            game_state[5] = [random.randrange(1, (window_x//10)) * 10,
+                            random.randrange(1, (window_y//10)) * 10]
+            game_state[6] = True
 
-        game_window.fill(black)
-        for pos in snake_body:
-            pygame.draw.rect(game_window, green, pygame.Rect(pos[0], pos[1], 10, 10))
-        pygame.draw.rect(game_window, white, pygame.Rect(food_pos[0], food_pos[1], 10, 10))
+        # Update achievements
+        game_state[13] = check_achievements(game_state)
 
-        if (snake_pos[0] < 0 or snake_pos[0] > window_x-10 or
-            snake_pos[1] < 0 or snake_pos[1] > window_y-10):
-            if not game_over(window_x, window_y, game_window, score):
-                return False
-            return True
+        # Game Over conditions
+        if (game_state[3][0] < 0 or game_state[3][0] > window_x-10 or
+            game_state[3][1] < 0 or game_state[3][1] > window_y-10):
+            game_over(game_state[2], game_state[9])
 
-        for block in snake_body[1:]:
-            if snake_pos == block:
-                if not game_over(window_x, window_y, game_window, score):
-                    return False
-                return True
+        for block in game_state[4][1:]:
+            if game_state[3] == block:
+                game_over(game_state[2], game_state[9])
 
-        show_score(game_window, score)
+        # Refresh game screen
+        game_state[2].fill(black)
+        for pos in game_state[4]:
+            pygame.draw.rect(game_state[2], green, 
+                           pygame.Rect(pos[0], pos[1], 10, 10))
+        pygame.draw.rect(game_state[2], red, 
+                        pygame.Rect(game_state[5][0], game_state[5][1], 10, 10))
+
+        show_score(game_state[2], game_state[9])
         pygame.display.update()
         fps.tick(15)
 
-def main():
-    while True:
-        if not game_loop():
-            break
-
 if __name__ == "__main__":
-    main()
+    game_loop()
